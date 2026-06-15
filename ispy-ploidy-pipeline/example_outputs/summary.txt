@@ -1,0 +1,29 @@
+PLOIDY PIPELINE - SUMMARY REPORT
+==================================================
+Input file        : data/demo_nuclei.csv
+Nuclei analysed   : 660
+Cells analysed    : 220
+
+PLOIDY CLASSES (from the Gaussian Mixture Model)
+--------------------------------------------------
+Number of classes chosen by BIC : 4
+  class 1 (  2C):   224 nuclei ( 33.9%)   mean intensity = 1683.4
+  class 2 (  4C):   232 nuclei ( 35.2%)   mean intensity = 3256.4
+  class 3 (  8C):   140 nuclei ( 21.2%)   mean intensity = 6311.0
+  class 4 ( 16C):    64 nuclei (  9.7%)   mean intensity = 12813.1
+Fold-change between neighbouring classes: 1.93x, 1.94x, 2.03x
+  (near 2.0 => the classes really are ploidy doublings)
+
+WITHIN-CELL PLOIDY (your multinucleate question)
+--------------------------------------------------
+Multinucleate cells (>=2 nuclei) : 220
+  mixed by ploidy class alone     : 88 (40.0%)
+  mixed AND >= 1.5x intensity gap : 72 (32.7%)  <-- headline number
+  (the second, stricter count ignores nuclei that only just
+   crossed a class boundary because of measurement noise.)
+Median brightest/dimmest ratio, uniform cells: 1.31  (near 1 = no real gap)
+Median brightest/dimmest ratio, mixed cells  : 2.13  (near/above 2 = a doubling)
+
+VALIDATION (demo data only)
+--------------------------------------------------
+Per-nucleus ploidy called correctly: 93.8%
