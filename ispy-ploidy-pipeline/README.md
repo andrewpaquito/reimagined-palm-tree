@@ -94,15 +94,23 @@ The pipeline (like iSPy) starts from a **CSV where each row is one nucleus**. Yo
 Open `data/demo_nuclei.csv` to see the exact shape your file should have. Two ways to make yours:
 
 - **You already use ilastik / a spreadsheet export?** Great — your CSV already has columns like `Total Intensity` and `Size in pixels`. Just note their exact names. (To get a `Cell_ID`, you need a segmentation of the *cells* as well as the *nuclei* — see below.)
-- **You have segmentation *mask* images (from CellPose, StarDist, ilastik, Fiji)?** Use the included helper to build the CSV directly:
+- **You have segmentation *mask* images (from Cellpose, StarDist, ilastik, Fiji)?** Use the included helper to build the CSV directly:
   ```bash
   python3 measure_from_labels.py \
-      --nuclei-labels nuclei_mask.tif \
-      --intensity     dapi.tif \
-      --cell-labels   cell_mask.tif \      # optional but needed for question #2
+      --nuclei-labels nuclei_mask.tif \    # segment this on your DNA channel
+      --intensity     dna.tif \            # measure ploidy on the DNA channel
+      --cell-labels   cell_mask.tif \      # optional; needed for question #2
+      --require-cell \                     # keep only nuclei inside a cell (see note)
       --out data/my_nuclei.csv
   ```
   (Needs the two optional packages — uncomment them in `requirements.txt` first.)
+
+  **`--require-cell`** drops any nucleus that isn't inside one of the cells in
+  `--cell-labels`. Use it when your cell mask marks **only your cell type of
+  interest** (e.g. a membrane marker present on just those cells): nuclei from
+  other cell types fall outside every mask and are excluded, so you assess
+  ploidy only in the cells you care about. Always measure `--intensity` on the
+  **DNA channel**, no matter which channel the cells were segmented from.
 
 > **The honest hard part:** turning a raw microscope image into those masks (segmentation) is a separate step done in a GUI tool (CellPose/StarDist/ilastik/Fiji). This pipeline can't do that for you, and neither can iSPy — both *start* after segmentation. If you tell me what your images look like (channels, 2D vs 3D, file type, and whether you've segmented yet), I can point you to the fastest segmentation route.
 

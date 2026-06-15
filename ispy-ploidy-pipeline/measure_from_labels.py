@@ -49,6 +49,11 @@ def main():
                     help="Raw fluorescence image (same shape as labels).")
     ap.add_argument("--cell-labels", default=None,
                     help="Optional label image of parent cells.")
+    ap.add_argument("--require-cell", action="store_true",
+                    help="Drop nuclei that fall inside NO cell in --cell-labels. "
+                         "Use this when the cell mask marks only your cell type "
+                         "of interest (e.g. a membrane marker on specific cells), "
+                         "so nuclei from other cell types are excluded.")
     ap.add_argument("--out", default="data/my_nuclei.csv",
                     help="Where to write the CSV.")
     args = ap.parse_args()
@@ -92,6 +97,14 @@ def main():
             else:
                 cell_of[lab] = -1                   # nucleus not inside any cell
         df["Cell_ID"] = df["nucleus_id"].map(cell_of)
+
+        # If the cell mask marks only the cell type of interest, drop nuclei
+        # that aren't inside any of those cells (they're other cell types).
+        if args.require_cell:
+            before = len(df)
+            df = df[df["Cell_ID"] > 0].copy()
+            print(f"  --require-cell: kept {len(df)} of {before} nuclei "
+                  f"(dropped {before - len(df)} not inside any cell).")
 
     # Tidy column order.
     front = ["nucleus_id"] + (["Cell_ID"] if args.cell_labels else [])
