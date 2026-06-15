@@ -105,6 +105,13 @@ Open `data/demo_nuclei.csv` to see the exact shape your file should have. Two wa
   ```
   (Needs the two optional packages — uncomment them in `requirements.txt` first.)
 
+  **`--background auto`** subtracts a background offset (the median of all
+  non-nucleus pixels) from each nucleus before summing intensity. Use it for
+  **dim stains sitting on a pedestal** (or melanized/autofluorescent samples),
+  where the background would otherwise inflate big nuclei more than small ones
+  and distort ploidy ratios. Pass a number instead of `auto` to subtract a fixed
+  value; the raw value is kept in a `Total_Intensity_raw` column.
+
   **`--require-cell`** drops any nucleus that isn't inside one of the cells in
   `--cell-labels`. Use it when your cell mask marks **only your cell type of
   interest** (e.g. a membrane marker present on just those cells): nuclei from

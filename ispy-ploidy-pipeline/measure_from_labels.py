@@ -47,6 +47,12 @@ def main():
                     help="Label image of nuclei (0 = background).")
     ap.add_argument("--intensity", required=True,
                     help="Raw fluorescence image (same shape as labels).")
+    ap.add_argument("--background", default="none",
+                    help="Subtract a background offset from intensity before "
+                         "summing, so a camera/autofluorescence pedestal doesn't "
+                         "distort ploidy ratios (important for dim stains). "
+                         "Options: 'none' (default), 'auto' (median of all non-"
+                         "nucleus pixels), or a number to subtract directly.")
     ap.add_argument("--cell-labels", default=None,
                     help="Optional label image of parent cells.")
     ap.add_argument("--require-cell", action="store_true",
@@ -80,6 +86,18 @@ def main():
         "area": "Nuclear_Volume",
         "mean_intensity": "Mean_Intensity",
     })
+
+    # Optional background subtraction. Total = (mean - bg) * area, floored at 0.
+    # Keeps the raw value in Total_Intensity_raw for reference.
+    if args.background != "none":
+        if args.background == "auto":
+            bg = float(np.median(signal[labels == 0]))  # typical non-nucleus level
+        else:
+            bg = float(args.background)
+        df["Total_Intensity_raw"] = df["Total_Intensity"]
+        df["Total_Intensity"] = ((df["Mean_Intensity"] - bg)
+                                 * df["Nuclear_Volume"]).clip(lower=0)
+        print(f"  background subtracted: {bg:.1f} counts (mode='{args.background}')")
 
     # If parent-cell labels were given, assign each nucleus to the cell it sits
     # in (the cell label most common under that nucleus's pixels).
