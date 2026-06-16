@@ -1,0 +1,19 @@
+# Python packages needed to run THIS pipeline.
+# Install with:   python3 -m pip install -r requirements.txt
+#
+# Any reasonably recent version works; these are lower bounds that are known good.
+numpy>=1.24
+pandas>=1.5
+matplotlib>=3.6
+scikit-learn>=1.2
+
+# Needed by measure_from_labels.py and melanophore_workflow.py (reading images,
+# segmenting cells from brightfield, region measurements).
+scikit-image>=0.20
+tifffile>=2023.1
+scipy>=1.9
+
+# ---------------------------------------------------------------------------
+# To run the *original* iSPy notebooks instead of this pipeline, use the authors'
+# conda environment files (ispy_conda_env_linux.yml / _mac.yml) from their repo -
+# those pin exact versions and also include h5py and seaborn.
