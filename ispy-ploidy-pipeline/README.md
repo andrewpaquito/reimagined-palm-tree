@@ -103,7 +103,6 @@ Open `data/demo_nuclei.csv` to see the exact shape your file should have. Two wa
       --require-cell \                     # keep only nuclei inside a cell (see note)
       --out data/my_nuclei.csv
   ```
-  (Needs the two optional packages — uncomment them in `requirements.txt` first.)
 
   **`--background auto`** subtracts a background offset (the median of all
   non-nucleus pixels) from each nucleus before summing intensity. Use it for
@@ -118,6 +117,35 @@ Open `data/demo_nuclei.csv` to see the exact shape your file should have. Two wa
   other cell types fall outside every mask and are excluded, so you assess
   ploidy only in the cells you care about. Always measure `--intensity` on the
   **DNA channel**, no matter which channel the cells were segmented from.
+
+### Specialized: epinephrine-treated melanophores (`melanophore_workflow.py`)
+
+For pigment cells whose melanin balls up into a central spot (epinephrine), with
+a **brightfield** channel where that pigment reads as a clean dark dot. It (1)
+finds the melanophores from the brightfield pigment spots, (2) assigns nuclei to
+the nearest pigment spot — which correctly pairs a cell's nuclei even when they
+sit on opposite sides — and (3) sets aside large, bright, unassigned green blobs
+as **xanthophores** (autofluorescence, not nuclei; an assumed-2C reference).
+
+```bash
+python3 melanophore_workflow.py \
+    --brightfield bf.tif \              # same field of view as the DNA image
+    --dna green.tif \                   # DNA/nuclear stain
+    --nuclei-labels green_cp_masks.tif \# nuclei segmented from green (Cellpose)
+    --pixel-size 0.54 \
+    --out data/melanophore_nuclei.csv
+# then, ploidy by SIZE (melanin doesn't shrink nuclei the way it quenches intensity):
+python3 ploidy_pipeline.py --csv data/melanophore_nuclei.csv \
+    --intensity-col Nuclear_Volume --cell-col Cell_ID
+```
+
+It writes a **QC overlay** (`data/melanophore_qc.png`) — *open it first* and check
+the red ×'s land on real melanophores before trusting any numbers. The
+`--pigment-min-um/--pigment-max-um/--assign-radius-um/--xantho-min-um` knobs will
+need a little tuning to your brightfield. **Why size, not intensity:** in these
+cells the DNA fluorescence is dim/variable, but nuclear *size* still tracks
+ploidy and isn't affected by pigment — on the test image, size resolved two
+ploidy classes ~2× apart while intensity resolved none.
 
 > **The honest hard part:** turning a raw microscope image into those masks (segmentation) is a separate step done in a GUI tool (CellPose/StarDist/ilastik/Fiji). This pipeline can't do that for you, and neither can iSPy — both *start* after segmentation. If you tell me what your images look like (channels, 2D vs 3D, file type, and whether you've segmented yet), I can point you to the fastest segmentation route.
 

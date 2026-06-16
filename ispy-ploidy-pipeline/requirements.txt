@@ -1,4 +1,4 @@
-# Python packages needed to run THIS pipeline (ploidy_pipeline.py + make_demo_data.py).
+# Python packages needed to run THIS pipeline.
 # Install with:   python3 -m pip install -r requirements.txt
 #
 # Any reasonably recent version works; these are lower bounds that are known good.
@@ -7,12 +7,13 @@ pandas>=1.5
 matplotlib>=3.6
 scikit-learn>=1.2
 
+# Needed by measure_from_labels.py and melanophore_workflow.py (reading images,
+# segmenting cells from brightfield, region measurements).
+scikit-image>=0.20
+tifffile>=2023.1
+scipy>=1.9
+
 # ---------------------------------------------------------------------------
-# OPTIONAL: only needed for measure_from_labels.py (turning segmented label
-# images into the per-nucleus CSV). Skip these if you already have a CSV.
-# scikit-image>=0.20
-# tifffile>=2023.1
-#
-# NOTE: To run the *original* iSPy notebooks instead of this pipeline, use the
-# authors' conda environment files (ispy_conda_env_linux.yml / _mac.yml) from
-# their repo - those pin exact versions and also include h5py, seaborn, scipy.
+# To run the *original* iSPy notebooks instead of this pipeline, use the authors'
+# conda environment files (ispy_conda_env_linux.yml / _mac.yml) from their repo -
+# those pin exact versions and also include h5py and seaborn.
