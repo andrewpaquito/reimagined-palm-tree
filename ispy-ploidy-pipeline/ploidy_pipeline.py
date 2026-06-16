@@ -116,6 +116,9 @@ def parse_args():
                    help="Largest number of classes to try when auto-choosing.")
     p.add_argument("--base-ploidy", type=int, default=2,
                    help="Ploidy of the dimmest class, for labelling (2 => 2C).")
+    p.add_argument("--label", default="fluorescence intensity",
+                   help="Name of the measured quantity, used on figure axes/titles "
+                        "(e.g. 'nuclear size' for a size-based run).")
     p.add_argument("--mixed-fold-threshold", type=float, default=1.5,
                    help="A cell is only called 'confidently mixed' if its "
                         "brightest nucleus is at least this many times brighter "
@@ -304,8 +307,8 @@ def within_cell_analysis(df, cell_col, intensity_col, fold_threshold=1.5):
 # ---------------------------------------------------------------------------
 # 5. Figures
 # ---------------------------------------------------------------------------
-def fig_intensity_gmm(fit, base_ploidy, path):
-    """Histogram of log2(intensity) overlaid with the fitted ploidy peaks."""
+def fig_intensity_gmm(fit, base_ploidy, path, label="fluorescence intensity"):
+    """Histogram of log2(measured value) overlaid with the fitted ploidy peaks."""
     x = fit["x_log2"]
     gmm, k = fit["gmm"], fit["k"]
 
@@ -326,9 +329,9 @@ def fig_intensity_gmm(fit, base_ploidy, path):
                 label=f"class {rank} ({ploidy_label(rank, base_ploidy)})")
     ax.plot(grid.ravel(), total, "k-", lw=2.0, label="combined fit")
 
-    ax.set_xlabel("log$_2$( fluorescence intensity )")
+    ax.set_xlabel(f"log$_2$( {label} )")
     ax.set_ylabel("density")
-    ax.set_title(f"Ploidy classes from intensity  (K = {k}, chosen by BIC)")
+    ax.set_title(f"Ploidy classes from {label}  (K = {k}, chosen by BIC)")
     ax.legend(fontsize=8, framealpha=0.9)
     fig.tight_layout()
     fig.savefig(path, dpi=150)
@@ -373,7 +376,7 @@ def fig_class_percentages(df, fit, base_ploidy, path):
     plt.close(fig)
 
 
-def fig_within_cell(per_cell, headline, path):
+def fig_within_cell(per_cell, headline, path, label="fluorescence intensity"):
     """The key figure for the multinucleate question, in two panels."""
     multi = per_cell[per_cell["n_nuclei"] >= 2]
     fig, (axL, axR) = plt.subplots(1, 2, figsize=(11, 4.4))
@@ -405,9 +408,9 @@ def fig_within_cell(per_cell, headline, path):
     axR.axvline(headline["fold_threshold"], color="#555555", ls="--", lw=1)
     axR.text(headline["fold_threshold"] + 0.02, axR.get_ylim()[1] * 0.55,
              "mixed-call\ncutoff", fontsize=8, color="#555555")
-    axR.set_xlabel("brightest / dimmest nucleus within a cell")
+    axR.set_xlabel(f"max / min {label} of nuclei within a cell")
     axR.set_ylabel("number of cells")
-    axR.set_title("Within-cell intensity range (no model, no threshold)")
+    axR.set_title(f"Within-cell {label} range (no model, no threshold)")
     axR.legend()
 
     fig.suptitle("Do the nuclei inside a cell share a ploidy?", fontsize=13)
@@ -491,7 +494,7 @@ def run_one(df, label, args, outdir):
 
     # ---- write the figures ----
     fig_intensity_gmm(fit, args.base_ploidy,
-                      os.path.join(outdir, "fig1_intensity_gmm.png"))
+                      os.path.join(outdir, "fig1_intensity_gmm.png"), args.label)
     fig_model_selection(fit, os.path.join(outdir, "fig2_model_selection.png"))
     fig_class_percentages(df, fit, args.base_ploidy,
                           os.path.join(outdir, "fig3_class_percentages.png"))
@@ -499,7 +502,7 @@ def run_one(df, label, args, outdir):
     # nuclei. With --cell-col none every nucleus is its own cell, so we skip it.
     if headline["n_multinucleate"] > 0:
         fig_within_cell(per_cell, headline,
-                        os.path.join(outdir, "fig4_within_cell.png"))
+                        os.path.join(outdir, "fig4_within_cell.png"), args.label)
     else:
         print("  (no multinucleate cells -> skipping the within-cell figure)")
     if args.volume_col != "none" and args.volume_col in df.columns:
