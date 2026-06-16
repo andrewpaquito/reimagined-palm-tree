@@ -120,32 +120,42 @@ Open `data/demo_nuclei.csv` to see the exact shape your file should have. Two wa
 
 ### Specialized: epinephrine-treated melanophores (`melanophore_workflow.py`)
 
-For pigment cells whose melanin balls up into a central spot (epinephrine), with
-a **brightfield** channel where that pigment reads as a clean dark dot. It (1)
-finds the melanophores from the brightfield pigment spots, (2) assigns nuclei to
-the nearest pigment spot — which correctly pairs a cell's nuclei even when they
-sit on opposite sides — and (3) sets aside large, bright, unassigned green blobs
-as **xanthophores** (autofluorescence, not nuclei; an assumed-2C reference).
+For pigment cells whose melanin balls up into a central spot (epinephrine). It
+(1) finds the melanophore centres, (2) assigns nuclei to the nearest centre —
+which correctly pairs a cell's nuclei even when they sit on opposite sides — and
+(3) sets aside large, bright, unassigned green blobs as **xanthophores**
+(autofluorescence, not nuclei; an assumed-2C reference). Then run ploidy by
+**size** (melanin doesn't shrink nuclei the way it quenches intensity — on the
+test image size resolved two ploidy classes ~2× apart while intensity resolved
+none).
+
+**Three ways to define the melanophore centres, most to least reliable:**
+
+1. **Hand-marked (recommended)** — in Fiji, multi-point-click each melanophore
+   on the fluorescence (toggle the brightfield as your guide), `Measure`, save
+   the table, and pass it:
+   ```bash
+   python3 melanophore_workflow.py --dna green.tif \
+       --nuclei-labels green_cp_masks.tif --centers-csv centres.csv \
+       --pixel-size 0.54 --out data/melanophore_nuclei.csv
+   ```
+2. **Registered brightfield** — `--brightfield bf.tif`, but it must already be
+   **resampled onto the DNA pixel grid** (same shape). A raw brightfield from a
+   *different camera* (different size/scale) won't work until it's registered —
+   cross-modality auto-registration is unreliable, so align it in Fiji first (or
+   ask me to set up a landmark-based registration).
+3. **DNA melanin-voids (quick but noisy)** — omit both of the above and it
+   thresholds the dark voids in the DNA channel. Fast, but it over-detects on
+   real images, so **only trust it after checking the QC overlay**.
 
 ```bash
-python3 melanophore_workflow.py \
-    --brightfield bf.tif \              # same field of view as the DNA image
-    --dna green.tif \                   # DNA/nuclear stain
-    --nuclei-labels green_cp_masks.tif \# nuclei segmented from green (Cellpose)
-    --pixel-size 0.54 \
-    --out data/melanophore_nuclei.csv
-# then, ploidy by SIZE (melanin doesn't shrink nuclei the way it quenches intensity):
+# after producing the CSV, ploidy by size + within-cell:
 python3 ploidy_pipeline.py --csv data/melanophore_nuclei.csv \
     --intensity-col Nuclear_Volume --cell-col Cell_ID
 ```
 
-It writes a **QC overlay** (`data/melanophore_qc.png`) — *open it first* and check
-the red ×'s land on real melanophores before trusting any numbers. The
-`--pigment-min-um/--pigment-max-um/--assign-radius-um/--xantho-min-um` knobs will
-need a little tuning to your brightfield. **Why size, not intensity:** in these
-cells the DNA fluorescence is dim/variable, but nuclear *size* still tracks
-ploidy and isn't affected by pigment — on the test image, size resolved two
-ploidy classes ~2× apart while intensity resolved none.
+It always writes a **QC overlay** (`melanophore_qc.png`) — *open it first* and
+confirm the red ×'s land on real melanophores before trusting any numbers.
 
 > **The honest hard part:** turning a raw microscope image into those masks (segmentation) is a separate step done in a GUI tool (CellPose/StarDist/ilastik/Fiji). This pipeline can't do that for you, and neither can iSPy — both *start* after segmentation. If you tell me what your images look like (channels, 2D vs 3D, file type, and whether you've segmented yet), I can point you to the fastest segmentation route.
 

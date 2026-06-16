@@ -76,42 +76,62 @@ def load_gray(path):
     return im
 
 
-def detect_pigment_centres(bf, px, min_um, max_um):
-    """Find melanophore central pigment spots = compact DARK blobs in brightfield.
+def detect_pigment_centres(img, px, min_um, max_um, source="brightfield",
+                           dark_percentile=8.0):
+    """Find melanophore central pigment spots = compact DARK blobs.
 
-    Steps: flatten uneven illumination (subtract a large-scale blur), keep places
-    markedly darker than their surroundings, clean up, and keep blobs whose size
-    matches a pigment aggregate. Returns an array of (y, x) centres.
+    Two sources:
+      'brightfield' - melanin is unambiguously dark; flatten the illumination
+                      (subtract a large blur) and Otsu-threshold the darkness.
+      'dna'         - no aligned brightfield, so use the dark melanin VOIDS in the
+                      DNA channel: smooth, then keep the darkest `dark_percentile`
+                      of pixels. Noisier than brightfield (tune via the QC image).
+    Keeps blobs whose size matches a pigment aggregate. Returns (y, x) centres.
     """
-    flat = bf - gaussian(bf, sigma=max(20, int(8 / px)), preserve_range=True)
-    darkness = -flat                       # pigment is darker than local background
-    darkness[darkness < 0] = 0
-    # Otsu on the darkness map separates pigment from everything else.
-    thr = threshold_otsu(darkness) if darkness.max() > 0 else 0
-    mask = darkness > thr
-    mask = ndi.binary_opening(mask, iterations=1)
-    mask = ndi.binary_fill_holes(mask)
+    if source == "brightfield":
+        flat = img - gaussian(img, sigma=max(20, int(8 / px)), preserve_range=True)
+        darkness = -flat
+        darkness[darkness < 0] = 0
+        thr = threshold_otsu(darkness) if darkness.max() > 0 else 0
+        mask = darkness > thr
+    else:  # 'dna': darkest patches of the smoothed DNA image are the melanin voids
+        sm = gaussian(img, sigma=1.5, preserve_range=True)
+        mask = sm < np.percentile(sm, dark_percentile)
+    mask = ndi.binary_fill_holes(ndi.binary_opening(mask, iterations=1))
 
     min_area = np.pi * (0.5 * min_um / px) ** 2
     max_area = np.pi * (0.5 * max_um / px) ** 2
-    centres = []
-    for r in regionprops(label(mask)):
-        if min_area <= r.area <= max_area and r.solidity > 0.6:
-            centres.append(r.centroid)        # (y, x)
+    centres = [r.centroid for r in regionprops(label(mask))
+               if min_area <= r.area <= max_area and r.solidity > 0.6]
     return np.array(centres) if centres else np.empty((0, 2))
 
 
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--brightfield", required=True)
+    ap.add_argument("--brightfield", default=None,
+                    help="Brightfield image (melanin = dark), ALREADY registered to "
+                         "the DNA grid (same shape). If your brightfield is a "
+                         "different camera/size, either resample it to match first "
+                         "or omit this and melanophores are found from the DNA "
+                         "channel's melanin voids instead.")
     ap.add_argument("--dna", required=True, help="DNA/nuclear-stain channel image.")
     ap.add_argument("--nuclei-labels", required=True,
                     help="Label image of nuclei segmented from the DNA channel.")
+    ap.add_argument("--centers-csv", default=None,
+                    help="MOST RELIABLE option: a CSV of melanophore centre "
+                         "coordinates you marked by hand in Fiji (multi-point tool "
+                         "-> Measure), in DNA-image pixels. Needs x/y columns "
+                         "(Fiji's X,Y or XM,YM work). If given, auto-detection is "
+                         "skipped. Mark them on the fluorescence using the "
+                         "brightfield as your guide.")
     ap.add_argument("--pixel-size", type=float, default=0.54, help="microns/pixel")
     ap.add_argument("--pigment-min-um", type=float, default=1.5)
     ap.add_argument("--pigment-max-um", type=float, default=12.0)
     ap.add_argument("--assign-radius-um", type=float, default=18.0)
+    ap.add_argument("--dark-percentile", type=float, default=8.0,
+                    help="Only used without --brightfield: the darkest this %% of "
+                         "the DNA image is treated as melanin voids. Tune via QC.")
     ap.add_argument("--xantho-min-um", type=float, default=9.0,
                     help="Unassigned green objects bigger than this (µm diameter) "
                          "are called xanthophores, not nuclei.")
@@ -123,20 +143,45 @@ def main():
     args = ap.parse_args()
 
     px = args.pixel_size
-    bf = load_gray(args.brightfield)
     dna = load_gray(args.dna)
     nuc = tifffile.imread(args.nuclei_labels)
-    if not (bf.shape == dna.shape == nuc.shape[-2:]):
-        raise SystemExit(f"Shapes must match: brightfield {bf.shape}, dna "
-                         f"{dna.shape}, nuclei {nuc.shape}. Make sure the "
-                         f"brightfield is the same field/resolution.")
+    if dna.shape != nuc.shape[-2:]:
+        raise SystemExit(f"DNA image {dna.shape} and nuclei labels {nuc.shape} "
+                         f"must be the same size.")
 
-    # --- 1. melanophore centres from brightfield ---
-    centres = detect_pigment_centres(bf, px, args.pigment_min_um, args.pigment_max_um)
-    print(f"melanophore pigment centres found: {len(centres)}")
+    # --- 1. melanophore centres: hand-marked > brightfield > DNA voids ---
+    if args.centers_csv:
+        cc = pd.read_csv(args.centers_csv)
+        low = {c.lower(): c for c in cc.columns}
+        xcol = next((low[k] for k in ("x", "xm", "centroid_x", "x_px") if k in low), None)
+        ycol = next((low[k] for k in ("y", "ym", "centroid_y", "y_px") if k in low), None)
+        if not xcol or not ycol:
+            raise SystemExit(f"--centers-csv needs x and y columns; found {list(cc.columns)}")
+        centres = np.column_stack([cc[ycol].to_numpy(float), cc[xcol].to_numpy(float)])
+        ref_img, ref_name = dna, "DNA + hand-marked centres"
+        print(f"using {len(centres)} hand-marked melanophore centres from {args.centers_csv}")
+    elif args.brightfield:
+        bf = load_gray(args.brightfield)
+        if bf.shape != dna.shape:
+            raise SystemExit(
+                f"Brightfield {bf.shape} != DNA {dna.shape}. Your brightfield is a "
+                f"different camera/size, so it must be REGISTERED and resampled onto "
+                f"the DNA grid before use (cross-modality registration). For now, "
+                f"omit --brightfield to detect melanophores from the DNA channel's "
+                f"melanin voids instead.")
+        ref_img, ref_name = bf, "brightfield"
+        centres = detect_pigment_centres(bf, px, args.pigment_min_um,
+                                         args.pigment_max_um, source="brightfield")
+    else:
+        ref_img, ref_name = dna, "DNA melanin-voids"
+        centres = detect_pigment_centres(dna, px, args.pigment_min_um,
+                                         args.pigment_max_um, source="dna",
+                                         dark_percentile=args.dark_percentile)
+    print(f"melanophore centres ({ref_name}): {len(centres)}")
     if len(centres) == 0:
-        print("  No pigment spots detected - adjust --pigment-min-um/--pigment-max-um "
-              "and check the QC image (brightfield contrast may need inverting).")
+        print("  No centres detected - tune --pigment-min-um/--pigment-max-um"
+              + ("/--dark-percentile" if not args.brightfield else "")
+              + " and check the QC image.")
 
     # --- 2. measure every green object, then classify it ---
     bg = (float(np.median(dna[nuc == 0])) if args.background == "auto"
@@ -197,11 +242,11 @@ def main():
         a, b = np.percentile(x, [lo, hi]); b = max(b, a + 1)
         return np.clip((x - a) / (b - a), 0, 1)
     fig, ax = plt.subplots(1, 2, figsize=(15, 8))
-    ax[0].imshow(st(bf), cmap="gray")
+    ax[0].imshow(st(ref_img), cmap="gray")
     if len(centres):
         ax[0].scatter(centres[:, 1], centres[:, 0], s=40, marker="x",
                       c="red", linewidths=1.3)
-    ax[0].set_title(f"brightfield + detected melanophore centres ({len(centres)})")
+    ax[0].set_title(f"{ref_name} + detected melanophore centres ({len(centres)})")
     ax[1].imshow(st(dna), cmap="gray")
     colors = {"melanophore_nucleus": "lime", "xanthophore": "magenta", "other": "yellow"}
     for ct, c in colors.items():
